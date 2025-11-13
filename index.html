@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { createRoot } from "react-dom/client";
 import { motion } from "framer-motion";
 import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
+import Particles from "react-tsparticles";
+import { loadFull } from "tsparticles";
 
 export default function RastyagFimozikaApp() {
   const [ready, setReady] = useState(false);
@@ -9,40 +10,17 @@ export default function RastyagFimozikaApp() {
   const [ffmpeg, setFfmpeg] = useState(null);
   const [file, setFile] = useState(null);
   const [fileUrl, setFileUrl] = useState("");
-  const [log, setLog] = useState([]);
-  const [targetWidth, setTargetWidth] = useState(1280);
-  const [targetHeight, setTargetHeight] = useState(720);
-  const [keepAspect, setKeepAspect] = useState(true);
-  const [processing, setProcessing] = useState(false);
   const [outputUrl, setOutputUrl] = useState("");
+  const [processing, setProcessing] = useState(false);
   const [lastMessage, setLastMessage] = useState("");
+  const [targetWidth, setTargetWidth] = useState(1080);
+  const [targetHeight, setTargetHeight] = useState(1080);
   const inputRef = useRef(null);
 
   useEffect(() => {
     const ff = createFFmpeg({ log: true });
-    ff.setLogger(({ type, message }) => {
-      setLog((l) => [...l.slice(-200), `[${type}] ${message}`]);
-    });
     setFfmpeg(ff);
   }, []);
-
-  const humanBytes = (n) => {
-    if (!n) return "0 B";
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let i = 0;
-    let x = n;
-    while (x >= 1024 && i < units.length - 1) { x /= 1024; i++; }
-    return `${x.toFixed(2)} ${units[i]}`;
-  };
-
-  const handleChooseFile = async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setFile(f);
-    setFileUrl(URL.createObjectURL(f));
-    setOutputUrl("");
-    setLastMessage("");
-  };
 
   const ensureFFmpegLoaded = async () => {
     if (!ffmpeg) return false;
@@ -54,141 +32,141 @@ export default function RastyagFimozikaApp() {
     return true;
   };
 
-  const parseSize = (v) => parseInt(v, 10) || 0;
+  const handleChooseFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setFileUrl(URL.createObjectURL(f));
+    setOutputUrl("");
+  };
 
   const process = async () => {
-    if (!file) return setLastMessage("Пожалуйста, загрузите файл.");
+    if (!file) return setLastMessage("Выберите видео файл");
+    await ensureFFmpegLoaded();
     setProcessing(true);
-    try {
-      await ensureFFmpegLoaded();
-      const name = "input.mp4";
-      const outName = `output_${targetWidth}x${targetHeight}.mp4`;
-      const inputData = await fetchFile(file);
-      ffmpeg.FS("writeFile", name, inputData);
 
-      // Lossless visual output (no re-encoding quality loss, just scaling)
-      const w = parseSize(targetWidth);
-      const h = parseSize(targetHeight);
-      const scale = keepAspect ? `scale=${w}:${h}:flags=lanczos` : `scale=${w}:${h}`;
-      const args = ["-i", name, "-vf", scale, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0", outName];
+    const inputName = "input.mp4";
+    const outputName = `output_${targetWidth}x${targetHeight}.mp4`;
 
-      await ffmpeg.run(...args);
-      const data = ffmpeg.FS("readFile", outName);
-      const blob = new Blob([data.buffer], { type: "video/mp4" });
-      const url = URL.createObjectURL(blob);
-      setOutputUrl(url);
-      setLastMessage(`Готово! Файл без потери качества: ${humanBytes(blob.size)}.`);
-    } catch (e) {
-      console.error(e);
-      setLastMessage("Ошибка: " + e.message);
-    } finally {
-      setProcessing(false);
-    }
+    const inputData = await fetchFile(file);
+    ffmpeg.FS("writeFile", inputName, inputData);
+
+    await ffmpeg.run(
+      "-i", inputName,
+      "-vf", `scale=${targetWidth}:${targetHeight}:flags=lanczos`,
+      "-c:v", "libx264", "-crf", "0", outputName
+    );
+
+    const data = ffmpeg.FS("readFile", outputName);
+    const blob = new Blob([data.buffer], { type: "video/mp4" });
+    const url = URL.createObjectURL(blob);
+    setOutputUrl(url);
+    setLastMessage("Готово! Видео без потери качества.");
+    setProcessing(false);
   };
 
   const presets = [
-    { name: "1080p (1920×1080)", w: 1920, h: 1080 },
-    { name: "720p (1280×720)", w: 1280, h: 720 },
-    { name: "1:1 (1080×1080)", w: 1080, h: 1080 },
-    { name: "4:5 (1080×1350)", w: 1080, h: 1350 },
-    { name: "9:16 (1080×1920)", w: 1080, h: 1920 },
+    { name: "1×1 (1080×1080)", w: 1080, h: 1080 },
+    { name: "4×5 (1080×1350)", w: 1080, h: 1350 },
+    { name: "9×16 (1080×1920)", w: 1080, h: 1920 },
+    { name: "16×9 (1920×1080)", w: 1920, h: 1080 }
   ];
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-indigo-800 to-pink-700 text-white p-6">
-      <div className="max-w-5xl mx-auto">
-        <motion.header initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8 }} className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center ring-1 ring-white/10 animate-pulse">
-            <strong className="text-2xl">🧵</strong>
-          </div>
-          <div>
-            <h1 className="text-3xl font-extrabold">растяг фимозика</h1>
-            <p className="text-sm text-white/80">Инструмент для изменения формата видео без потери качества</p>
-          </div>
-        </motion.header>
+  const particlesInit = async (main) => {
+    await loadFull(main);
+  };
 
-        <motion.main initial={{ scale: 0.98, opacity: 0.8 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.6 }} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <section className="md:col-span-2 bg-white/6 p-6 rounded-2xl shadow-lg ring-1 ring-white/5">
-            <h2 className="text-xl font-semibold mb-4">1) Загрузите видео</h2>
-            <div className="flex gap-4 items-center">
-              <label className="cursor-pointer bg-gradient-to-r from-pink-500 to-orange-400 px-4 py-2 rounded-lg shadow hover:scale-105 transform transition">
-                Выбрать файл
-                <input ref={inputRef} onChange={handleChooseFile} accept="video/*" type="file" className="hidden" />
-              </label>
-              <div className="text-sm text-white/70">{ready ? 'Движок готов' : ffmpegLoading ? 'Загрузка ffmpeg...' : ''}</div>
+  return (
+    <div className="relative min-h-screen bg-gradient-to-br from-indigo-900 via-purple-800 to-pink-700 text-white overflow-hidden">
+      <Particles
+        id="tsparticles"
+        init={particlesInit}
+        className="absolute inset-0 z-0"
+        options={{
+          background: { color: { value: "transparent" } },
+          fpsLimit: 60,
+          particles: {
+            number: { value: 100, density: { enable: true, area: 800 } },
+            color: { value: ["#ffffff", "#ff80ff", "#80ffea"] },
+            shape: { type: "circle" },
+            opacity: { value: 0.6 },
+            size: { value: { min: 1, max: 4 } },
+            move: {
+              enable: true,
+              speed: 1.5,
+              direction: "none",
+              random: true,
+              straight: false,
+              outModes: { default: "out" },
+            },
+            links: { enable: true, distance: 150, color: "#ffffff", opacity: 0.2, width: 1 }
+          },
+          detectRetina: true
+        }}
+      />
+
+      <div className="relative z-10 max-w-5xl mx-auto p-8">
+        <motion.h1 initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 1 }} className="text-5xl font-extrabold text-center mb-4 bg-clip-text text-transparent bg-gradient-to-r from-pink-300 via-purple-200 to-indigo-300">
+          растяг фимозика
+        </motion.h1>
+
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6, duration: 1 }} className="text-center text-white/80 mb-10 text-lg">
+          Магический инструмент для растягивания видео без потери качества ✨
+        </motion.p>
+
+        <motion.div className="bg-white/10 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-white/10" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }}>
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex-1">
+              <motion.div whileHover={{ scale: 1.02 }} className="border-2 border-dashed border-white/20 rounded-xl p-6 flex flex-col items-center justify-center text-center">
+                {!fileUrl ? (
+                  <>
+                    <p className="mb-3 text-white/70">Перетащите сюда видео или выберите файл</p>
+                    <label className="cursor-pointer px-4 py-2 bg-gradient-to-r from-pink-500 to-orange-400 rounded-lg font-semibold shadow-lg hover:scale-105 transition">
+                      Выбрать файл
+                      <input ref={inputRef} onChange={handleChooseFile} type="file" accept="video/*" className="hidden" />
+                    </label>
+                  </>
+                ) : (
+                  <video src={fileUrl} controls className="rounded-lg shadow-lg max-h-64 w-full object-contain" />
+                )}
+              </motion.div>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white/4 rounded-lg p-4">
-                <h3 className="font-semibold">Предпросмотр</h3>
-                {fileUrl ? (<video src={fileUrl} controls className="mt-3 w-full rounded-md shadow" />) : (<div className="mt-3 text-white/60">Файл не выбран</div>)}
-              </div>
-
-              <div className="bg-white/4 rounded-lg p-4">
-                <h3 className="font-semibold">Параметры вывода</h3>
-                <div className="mt-3 space-y-2">
-                  <div className="flex gap-2 items-center">
-                    <label className="text-sm">Ширина</label>
-                    <input value={targetWidth} onChange={(e) => setTargetWidth(e.target.value)} className="ml-auto bg-white/6 rounded px-2 py-1 w-28" />
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <label className="text-sm">Высота</label>
-                    <input value={targetHeight} onChange={(e) => setTargetHeight(e.target.value)} className="ml-auto bg-white/6 rounded px-2 py-1 w-28" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input id="aspect" type="checkbox" checked={keepAspect} onChange={() => setKeepAspect(!keepAspect)} />
-                    <label htmlFor="aspect" className="text-sm">Сохранить соотношение сторон</label>
-                  </div>
-
-                  <div className="pt-2">
-                    <label className="text-sm block mb-1">Пресеты</label>
-                    <div className="flex flex-wrap gap-2">
-                      {presets.map((p) => (
-                        <button key={p.name} onClick={() => { setTargetWidth(p.w); setTargetHeight(p.h); }} className="bg-white/6 rounded px-3 py-1 text-sm">{p.name}</button>
-                      ))}
-                    </div>
-                  </div>
+            <motion.div className="flex-1 space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+              <div>
+                <h3 className="font-bold mb-2 text-lg">Размер выходного видео</h3>
+                <div className="flex gap-3 mb-3 flex-wrap">
+                  {presets.map(p => (
+                    <button key={p.name} onClick={() => { setTargetWidth(p.w); setTargetHeight(p.h); }} className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm backdrop-blur transition">
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-4">
+                  <input value={targetWidth} onChange={e => setTargetWidth(e.target.value)} className="bg-white/10 rounded px-3 py-2 w-24 text-center" placeholder="Ширина" />
+                  <input value={targetHeight} onChange={e => setTargetHeight(e.target.value)} className="bg-white/10 rounded px-3 py-2 w-24 text-center" placeholder="Высота" />
                 </div>
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-3 items-center">
-              <button onClick={process} disabled={processing || ffmpegLoading} className="px-5 py-3 rounded-2xl bg-gradient-to-r from-green-400 to-teal-400 text-black font-bold transform hover:scale-105 transition">
+              <motion.button onClick={process} disabled={processing} whileHover={{ scale: 1.05 }} className="w-full py-3 rounded-2xl bg-gradient-to-r from-green-400 to-teal-400 text-black font-bold shadow-xl hover:shadow-2xl transition">
                 {processing ? 'Обработка…' : 'Запустить растяжку'}
-              </button>
+              </motion.button>
 
-              {outputUrl && (<a href={outputUrl} download className="px-4 py-2 bg-white/8 rounded-lg">Скачать результат</a>)}
+              {outputUrl && (
+                <motion.a whileHover={{ scale: 1.05 }} href={outputUrl} download className="block text-center bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition">
+                  Скачать результат
+                </motion.a>
+              )}
 
-              <div className="ml-auto text-sm text-white/70">{lastMessage}</div>
-            </div>
-
-            <div className="mt-6 bg-white/3 p-3 rounded-lg max-h-44 overflow-auto font-mono text-xs">
-              <strong>Логи ffmpeg:</strong>
-              <div className="mt-2 space-y-1">
-                {log.slice().reverse().map((line, i) => (<div key={i}>{line}</div>))}
-              </div>
-            </div>
-          </section>
-
-          <aside className="bg-white/6 p-6 rounded-2xl shadow-lg ring-1 ring-white/5 flex flex-col gap-4">
-            <motion.div whileHover={{ scale: 1.03 }} className="p-4 rounded-lg bg-white/4">
-              <h3 className="font-semibold">Как это работает</h3>
-              <p className="text-sm text-white/80 mt-2">ffmpeg.wasm работает прямо в браузере. Файл не покидает ваше устройство. Масштабирование выполняется без потери визуального качества при помощи CRF=0 (максимальное качество).</p>
+              {lastMessage && <p className="text-white/70 mt-2 text-sm text-center">{lastMessage}</p>}
             </motion.div>
-            <div className="mt-auto text-xs text-white/70">© растяг фимозика — без потери качества</div>
-          </aside>
-        </motion.main>
-      </div>
+          </div>
+        </motion.div>
 
-      <svg className="pointer-events-none fixed right-6 bottom-6 w-40 h-40 opacity-20" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="g" x1="0" x2="1">
-            <stop offset="0%" stopColor="#ff80bf" />
-            <stop offset="100%" stopColor="#7a5cff" />
-          </linearGradient>
-        </defs>
-        <motion.circle animate={{ r: [10, 40, 10] }} transition={{ duration: 6, loop: Infinity }} cx="100" cy="100" r="20" fill="url(#g)" />
-      </svg>
+        <motion.div className="text-center mt-10 text-white/70" animate={{ opacity: [0.6, 1, 0.6] }} transition={{ duration: 3, repeat: Infinity }}>
+          © растяг фимозика — магия без потерь качества ✨
+        </motion.div>
+      </div>
     </div>
   );
 }
