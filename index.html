@@ -77,7 +77,7 @@ export default function RastyagFimozikaApp() {
       const blob = new Blob([data.buffer], { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
       setOutputUrl(url);
-      setLastMessage(`Готово! Видео: ${humanBytes(blob.size)}.`);
+      setLastMessage(`Готово! Файл без потери качества: ${humanBytes(blob.size)}.`);
     } catch (e) {
       console.error(e);
       setLastMessage("Ошибка: " + e.message);
@@ -87,6 +87,8 @@ export default function RastyagFimozikaApp() {
   };
 
   const presets = [
+    { name: "1080p (1920×1080)", w: 1920, h: 1080 },
+    { name: "720p (1280×720)", w: 1280, h: 720 },
     { name: "1:1 (1080×1080)", w: 1080, h: 1080 },
     { name: "4:5 (1080×1350)", w: 1080, h: 1350 },
     { name: "9:16 (1080×1920)", w: 1080, h: 1920 },
@@ -101,7 +103,7 @@ export default function RastyagFimozikaApp() {
           </div>
           <div>
             <h1 className="text-3xl font-extrabold">растяг фимозика</h1>
-            <p className="text-sm text-white/80">Видеоредактор для растяга видео без потери качества</p>
+            <p className="text-sm text-white/80">Инструмент для изменения формата видео без потери качества</p>
           </div>
         </motion.header>
 
@@ -152,7 +154,7 @@ export default function RastyagFimozikaApp() {
 
             <div className="mt-6 flex gap-3 items-center">
               <button onClick={process} disabled={processing || ffmpegLoading} className="px-5 py-3 rounded-2xl bg-gradient-to-r from-green-400 to-teal-400 text-black font-bold transform hover:scale-105 transition">
-                {processing ? 'Обработка…' : 'Растянуть'}
+                {processing ? 'Обработка…' : 'Запустить растяжку'}
               </button>
 
               {outputUrl && (<a href={outputUrl} download className="px-4 py-2 bg-white/8 rounded-lg">Скачать результат</a>)}
@@ -190,4 +192,3 @@ export default function RastyagFimozikaApp() {
     </div>
   );
 }
-                          
